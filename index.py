@@ -77,7 +77,7 @@ async def query_rag_system(request: QueryRequest):
         data = {
             "contents": [{
                 "parts": [{
-                     "text": f"Summarize the following project details in about 700 words based on the question: '{request.question}' and the project info: {context}"
+                     "text": f"Summarize the following project details in about 100 words based on the question: '{request.question}' and the project info: {context}"
                 }]
             }]
         }
