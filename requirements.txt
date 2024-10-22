@@ -1,6 +1,7 @@
 fastapi
 uvicorn
 pymongo
+httpx
 pydantic
 requests
 langchain-openai==0.2.3

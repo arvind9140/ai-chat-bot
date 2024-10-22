@@ -8,5 +8,7 @@ myenv/
 
 # Ignore environment variable files
 .env
+app.py
+index.html
 
 # Ignore other files or directories as needed
