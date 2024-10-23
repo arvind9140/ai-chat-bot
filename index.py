@@ -6,20 +6,16 @@ from fastapi.responses import StreamingResponse
 import asyncio
 from pymongo import MongoClient
 from pydantic import BaseModel
-from langchain_openai import OpenAIEmbeddings
-from langchain_openai import OpenAI
-from langchain.prompts import PromptTemplate
-from langchain_mongodb import MongoDBAtlasVectorSearch
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 load_dotenv()
 
 def clean_response_text(text):
-    clean_text = re.sub(r'\*+', '', text)  
+    clean_text = re.sub(r'\*+', '', text)
     clean_text = re.sub(r'\<.*?\>', '', clean_text)
-    clean_text = clean_text.replace('\n', ' ') 
-    clean_text = clean_text.strip()  
+    clean_text = clean_text.replace('\n', ' ')
+    clean_text = clean_text.strip()
     return clean_text
 
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
@@ -28,12 +24,8 @@ MONGODB_URI = os.getenv('MONGODB_URI')
 client = MongoClient(MONGODB_URI)
 db = client['interior_Design']
 project_collection = "project"
-
-# Configure embeddings
-embeddings = OpenAIEmbeddings()
-project_vector_store = MongoDBAtlasVectorSearch(collection=project_collection, embedding=embeddings)
-
-llm = OpenAI(model_name="gemini-1.5-flash-latest")  
+lead_collection = "Lead"
+user_collection = "users"
 
 class QueryRequest(BaseModel):
     question: str
@@ -41,29 +33,74 @@ class QueryRequest(BaseModel):
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins, adjust as necessary
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Allow all methods (GET, POST, etc.)
-    allow_headers=["*"],  # Allow all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 @app.post("/query/")
 async def query_rag_system(request: QueryRequest):
     try:
+        project_name = None
+        lead_name = None
+        context = None
+
+        # Check for project name in the request
         match = re.search(r'project (\w+)', request.question, re.IGNORECASE)
         if match:
             project_name = match.group(1)
-        else:
-            raise HTTPException(status_code=400, detail="Project name not found in the question.")
-        
-        project_details = db[project_collection].find_one({"project_name": project_name})
-        
-        if not project_details:
-            raise HTTPException(status_code=404, detail="Project not found.")
-        
-        context = project_details 
+
+        # Check for lead name in the request
+        match = re.search(r'lead (\w+)', request.question, re.IGNORECASE)
+        print(match)
+        if match:
+            lead_name = match.group(1)
+
+        # Retrieve project details if project name is found
+        if project_name:
+            project_details = db[project_collection].find_one({"project_name": project_name})
+            if project_details:
+                project_id = project_details.get("project_id") 
+                if project_id:
+                    assignees = list(db[user_collection].find({'data.projectData.project_id':project_id}))
+                    usernames = [assignee['username'] for assignee in assignees if 'username' in assignee]
+                    for username in usernames:
+                        print(username)
+                    project_details['assignees'] = usernames
+                else:
+                    project_details['assignees']=[]    
+                context = project_details
+            else:
+                raise HTTPException(status_code=404, detail="Project not found.")
+
+        # Retrieve lead details if lead name is found
        
-        # Prepare the request to Gemini API
+        if lead_name:
+            lead_details = db[lead_collection].find_one({"name": lead_name})
+            if lead_details:
+                lead_id = lead_details.get("lead_id")  
+                
+                if lead_id:
+                  
+                    assignees = list(db[user_collection].find({'data.leadData.lead_id': lead_id}))
+                    usernames = [assignee['username'] for assignee in assignees if 'username' in assignee]
+
+                   
+                    lead_details['assignees'] = usernames
+                else:
+                    lead_details['assignees'] = [] 
+
+                context = lead_details
+            else:
+                raise HTTPException(status_code=404, detail="Lead not found.")
+
+
+        # If neither project nor lead is found, return an error
+        if context is None:
+            raise HTTPException(status_code=400, detail="No valid project or lead name found in the question.")
+
+        # Prepare the request to the Gemini API
         gemini_url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent'
         headers = {
             'Content-Type': 'application/json',
@@ -71,19 +108,18 @@ async def query_rag_system(request: QueryRequest):
         data = {
             "contents": [{
                 "parts": [{
-                     "text": f"Summarize the following project details in no more than 100 words and not give id: '{request.question}' and the project info: {context}."
+                    "text": f"Summarize the following details in no more than 100 words and do not give ID: '{request.question}' and the info: {context}."
                 }]
             }]
         }
-        
+
         # Call the Gemini API
         response = requests.post(f"{gemini_url}?key={OPENAI_API_KEY}", headers=headers, json=data)
-        
         response_data = response.json()
 
         if response.status_code != 200:
             raise HTTPException(status_code=response.status_code, detail=response_data.get("error", "Failed to generate response."))
-        
+
         if response_data.get("candidates"):
             generated_response = response_data["candidates"][0]["content"]["parts"][0]["text"]
             generated_response = clean_response_text(generated_response)
