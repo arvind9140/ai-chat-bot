@@ -59,7 +59,7 @@ async def query_rag_system(request: QueryRequest):
         check_user = db[user_collection].find_one({"_id": ObjectId(user_id), "organization": org_id})
         if not check_user:
             raise HTTPException(status_code=404, detail="User not found")
-        
+
         # Check for project name and lead name in the request
         match = re.search(r'project (\w+)', request.question, re.IGNORECASE)
         project_name = match.group(1) if match else None
@@ -72,17 +72,15 @@ async def query_rag_system(request: QueryRequest):
 
         # Check user role
         role = check_user.get('role')
-        if role  in ['ADMIN', 'SUPERADMIN']:
+        if role in ['ADMIN', 'SUPERADMIN']:
             # Retrieve project details
             if project_name:
                 project_details = db[project_collection].find_one({"project_name": project_name, "org_id": org_id})
                 if project_details:
-                    project_id = project_details.get("project_id") 
-                    if project_id:
-                        assignees = list(db[user_collection].find({'data.projectData.project_id': project_id, "organization": org_id}))
-                        usernames = [assignee['username'] for assignee in assignees if 'username' in assignee]
-                        project_details['assignees'] = usernames
-                    context = project_details
+                    # Exclude ID from context
+                    project_info = {k: v for k, v in project_details.items() if k not in ['_id', 'project_id','org_id','fileId',]}
+                    project_info['assignees'] = [assignee['username'] for assignee in db[user_collection].find({'data.projectData.project_id': project_details.get('project_id'), "organization": org_id})]
+                    context = project_info
                 else:
                     raise HTTPException(status_code=404, detail="Project not found.")
 
@@ -90,33 +88,38 @@ async def query_rag_system(request: QueryRequest):
             if lead_name:
                 lead_details = db[lead_collection].find_one({"name": lead_name, "org_id": org_id})
                 if lead_details:
-                    lead_id = lead_details.get("lead_id")  
-                    if lead_id:
-                        assignees = list(db[user_collection].find({'data.leadData.lead_id': lead_id, "organization": org_id}))
-                        usernames = [assignee['username'] for assignee in assignees if 'username' in assignee]
-                        lead_details['assignees'] = usernames
-                    context = lead_details
+                    # Exclude ID from context
+                    lead_info = {k: v for k, v in lead_details.items() if k not in ['_id', 'lead_id', 'org_id']}
+                    lead_info['assignees'] = [assignee['username'] for assignee in db[user_collection].find({'data.leadData.lead_id': lead_details.get('lead_id'), "organization": org_id})]
+                    context = lead_info
                 else:
                     raise HTTPException(status_code=404, detail="Lead not found.")
 
             # Retrieve user details
+            # Retrieve user details
             if user_name:
-                user_details = db[user_collection].find_one({"username": user_name, "organization": org_id})
-                if user_details:
-                    context = user_details
-                else:
-                    raise HTTPException(status_code=404, detail="User not found.")
+                    user_details = db[user_collection].find_one({"username": user_name, "organization": org_id})
+                    if user_details:
+                        # Exclude ID from context
+                        user_info = {k: v for k, v in user_details.items() if k not in ['_id', 'org_id','organization','password','data','refreshToken','userProfile']}
+                        
+                        # Fetch the organization name
+                        org_details = db[org_collection].find_one({"_id": ObjectId(org_id)})
+                        if org_details:
+                            user_info['organisation_name'] = org_details.get('organization')  # Assuming the name field contains the organization name
+                            
+                        context = user_info
+                    else:
+                        raise HTTPException(status_code=404, detail="User not found.")
+
         elif role in ['Senior Architect']:
-                # Retrieve project details
+            # Similar logic as above for Senior Architect
             if project_name:
                 project_details = db[project_collection].find_one({"project_name": project_name, "org_id": org_id})
                 if project_details:
-                    project_id = project_details.get("project_id") 
-                    if project_id:
-                        assignees = list(db[user_collection].find({'data.projectData.project_id': project_id, "organization": org_id}))
-                        usernames = [assignee['username'] for assignee in assignees if 'username' in assignee]
-                        project_details['assignees'] = usernames
-                    context = project_details
+                    project_info = {k: v for k, v in project_details.items() if k not in ['_id', 'project_id', 'org_id', 'fileId']}
+                    project_info['assignees'] = [assignee['username'] for assignee in db[user_collection].find({'data.projectData.project_id': project_details.get('project_id'), "organization": org_id})]
+                    context = project_info
                 else:
                     raise HTTPException(status_code=404, detail="Project not found.")
 
@@ -124,48 +127,37 @@ async def query_rag_system(request: QueryRequest):
             if lead_name:
                 lead_details = db[lead_collection].find_one({"name": lead_name, "org_id": org_id})
                 if lead_details:
-                    lead_id = lead_details.get("lead_id")  
-                    if lead_id:
-                        assignees = list(db[user_collection].find({'data.leadData.lead_id': lead_id, "organization": org_id}))
-                        usernames = [assignee['username'] for assignee in assignees if 'username' in assignee]
-                        lead_details['assignees'] = usernames
-                    context = lead_details
+                    lead_info = {k: v for k, v in lead_details.items() if k not in ['_id', 'lead_id','org_id']}
+                    lead_info['assignees'] = [assignee['username'] for assignee in db[user_collection].find({'data.leadData.lead_id': lead_details.get('lead_id'), "organization": org_id})]
+                    context = lead_info
                 else:
                     raise HTTPException(status_code=404, detail="Lead not found.")
 
         else:
-            
+            # For other roles, check access
             find_project = db[project_collection].find_one({"project_name": project_name, "org_id": org_id})
             find_lead = db[lead_collection].find_one({"name": lead_name, "org_id": org_id})
+
             if find_project:
-                project_id = find_project.get("project_id") 
-                if project_id:
-                    check_user_access = db[user_collection].find_one({"_id": ObjectId(user_id), "organization": org_id, "data.projectData.project_id": project_id})
-                    if check_user_access:
-                        assignees = list(db[user_collection].find({'data.projectData.project_id': project_id, "organization": org_id}))
-                        usernames = [assignee['username'] for assignee in assignees if 'username' in assignee]
-                        find_project['assignees'] = usernames
-                        context = find_project
-                    else:
-                        context = {"You have not access to get this project details."} 
+                project_id = find_project.get("project_id")
+                check_user_access = db[user_collection].find_one({"_id": ObjectId(user_id), "organization": org_id, "data.projectData.project_id": project_id})
+                if check_user_access:
+                    project_info = {k: v for k, v in find_project.items() if k not in ['_id', 'project_id', 'org_id']}
+                    project_info['assignees'] = [assignee['username'] for assignee in db[user_collection].find({'data.projectData.project_id': project_id, "organization": org_id})]
+                    context = project_info
                 else:
-                   context = {"You have not access to get this project details."} 
+                    context = {"message": "You do not have access to get this project details."}
             elif find_lead:
-                lead_id = find_lead.get("lead_id")  
-                if lead_id:
-                    check_user_access = db[user_collection].find_one({"_id": ObjectId(user_id), "organization": org_id, "data.leadData.lead_id": lead_id})
-                    if check_user_access:
-                        assignees = list(db[user_collection].find({'data.leadData.lead_id': lead_id, "organization": org_id}))
-                        usernames = [assignee['username'] for assignee in assignees if 'username' in assignee]
-                        find_lead['assignees'] = usernames
-                        context = find_lead
-                    else:
-                       context = {"You don't have access to this lead."}
+                lead_id = find_lead.get("lead_id")
+                check_user_access = db[user_collection].find_one({"_id": ObjectId(user_id), "organization": org_id, "data.leadData.lead_id": lead_id})
+                if check_user_access:
+                    lead_info = {k: v for k, v in find_lead.items() if k not in ['_id', 'lead_id', 'org_id']}
+                    lead_info['assignees'] = [assignee['username'] for assignee in db[user_collection].find({'data.leadData.lead_id': lead_id, "organization": org_id})]
+                    context = lead_info
                 else:
-                   context = {"You have not access to get this lead details."} 
+                    context = {"message": "You do not have access to this lead."}
             else:
-                context = {"You have not access to get details."}
-        # If context is still None, no valid entity found
+                context = {"message": "You do not have access to get details."}
 
         # Prepare the request to the Gemini API
         gemini_url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent'
