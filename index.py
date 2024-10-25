@@ -46,9 +46,10 @@ app.add_middleware(
 @app.post("/query/")
 async def query_rag_system(request: QueryRequest):
     try:
-        context = None
+        context = {}
         org_id = request.org_id
         user_id = request.user_id
+        project_id = None
         
         # Check organisation
         check_org = db[org_collection].find_one({"_id": ObjectId(org_id)})
@@ -69,7 +70,6 @@ async def query_rag_system(request: QueryRequest):
 
         match = re.search(r'user (\w+)', request.question, re.IGNORECASE)
         user_name = match.group(1) if match else None
-
         # Check user role
         role = check_user.get('role')
         if role in ['ADMIN', 'SUPERADMIN']:
@@ -78,6 +78,7 @@ async def query_rag_system(request: QueryRequest):
                 project_details = db[project_collection].find_one({"project_name": project_name, "org_id": org_id})
                 if project_details:
                     # Exclude ID from context
+                    project_id = project_details.get("project_id")
                     project_info = {k: v for k, v in project_details.items() if k not in ['_id', 'project_id','org_id','fileId',]}
                     project_info['assignees'] = [assignee['username'] for assignee in db[user_collection].find({'data.projectData.project_id': project_details.get('project_id'), "organization": org_id})]
                     context = project_info
@@ -96,7 +97,6 @@ async def query_rag_system(request: QueryRequest):
                     raise HTTPException(status_code=404, detail="Lead not found.")
 
             # Retrieve user details
-            # Retrieve user details
             if user_name:
                     user_details = db[user_collection].find_one({"username": user_name, "organization": org_id})
                     if user_details:
@@ -112,11 +112,31 @@ async def query_rag_system(request: QueryRequest):
                     else:
                         raise HTTPException(status_code=404, detail="User not found.")
 
+            projects = list(db[project_collection].find({"org_id": org_id}))
+            project_list = [
+                    {
+                        'project_name': project.get('project_name'),
+                        'client_info': project.get('client'),
+                        'phase': project.get('project_status'),  
+                        
+                    }
+                    for project in projects
+                ]
+            context['projects'] = project_list
+
+            leads = list(db[lead_collection].find({"org_id": org_id}))
+            
+            lead_list = [
+                {k: v for k, v in lead.items() if k not in ['_id', 'lead_id', 'org_id', 'fileId']}
+                for lead in leads
+            ]
+            context['leads'] = lead_list
         elif role in ['Senior Architect']:
             # Similar logic as above for Senior Architect
             if project_name:
                 project_details = db[project_collection].find_one({"project_name": project_name, "org_id": org_id})
                 if project_details:
+                    project_id = project_details.get("project_id")
                     project_info = {k: v for k, v in project_details.items() if k not in ['_id', 'project_id', 'org_id', 'fileId']}
                     project_info['assignees'] = [assignee['username'] for assignee in db[user_collection].find({'data.projectData.project_id': project_details.get('project_id'), "organization": org_id})]
                     context = project_info
@@ -132,7 +152,26 @@ async def query_rag_system(request: QueryRequest):
                     context = lead_info
                 else:
                     raise HTTPException(status_code=404, detail="Lead not found.")
+ 
+            projects = list(db[project_collection].find({"org_id": org_id}))
+            project_list = [
+                    {
+                        'project_name': project.get('project_name'),
+                        'client_info': project.get('client'),
+                        'phase': project.get('project_status'),
+                        
+                    }
+                    for project in projects
+                ]
+            context['projects'] = project_list
 
+            leads = list(db[lead_collection].find({"org_id": org_id}))
+            
+            lead_list = [
+                {k: v for k, v in lead.items() if k not in ['_id', 'lead_id', 'org_id', 'fileId']}
+                for lead in leads
+            ]
+            context['leads'] = lead_list
         else:
             # For other roles, check access
             find_project = db[project_collection].find_one({"project_name": project_name, "org_id": org_id})
@@ -167,7 +206,7 @@ async def query_rag_system(request: QueryRequest):
         data = {
             "contents": [{
                 "parts": [{
-                    "text": f"Summarize the following details in no more than 100 words and do not give ID: '{request.question}' and the info: {context}."
+                    "text": f"Summarize the following details in no more than 100 words: '{request.question}' and the info: {context}."
                 }]
             }]
         }
@@ -184,14 +223,18 @@ async def query_rag_system(request: QueryRequest):
             generated_response = clean_response_text(generated_response)
         else:
             generated_response = "No response generated."
-
+        
         # Streaming response generator
-        async def event_generator():
-            for chunk in generated_response.split('. '):  # Split by sentence for chunks
+        async def event_generator(project_id):
+            projectId = True
+            for chunk in generated_response.split('. '):  
                 yield f"data: {chunk.strip()}\n\n"
-                await asyncio.sleep(1)  # Optional: wait before sending the next chunk
+                await asyncio.sleep(1)
+                if projectId:
+                    yield f"data: project_id:{project_id}\n\n"
+                    projectId = False  
 
-        return StreamingResponse(event_generator(), media_type="text/event-stream")
+        return StreamingResponse(event_generator(project_id), media_type="text/event-stream")
 
     except Exception as e:
         print(f"Error: {e}")
