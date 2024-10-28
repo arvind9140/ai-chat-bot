@@ -64,13 +64,13 @@ async def query_rag_system(request: QueryRequest):
 
         # Check for project name, lead name, and user name in the request
        
-        if "all projects" in request.question.lower():
+        if any(phrase in request.question.lower() for phrase in ["entire projects", "all projects","whole projects", "all project"]):
             project_id = '00000000000'
         else:
             match = re.search(r'project (\w+)', request.question, re.IGNORECASE)
             project_name = match.group(1) if match else None
         
-        if "all leads" in request.question.lower():
+        if any(phrase in request.question.lower() for phrase in ["entire leads", "all leads",  "all lead", "whole leads"]):
             lead_id = '111111'
         else:
             match = re.search(r'lead (\w+)', request.question, re.IGNORECASE)
