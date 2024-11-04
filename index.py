@@ -234,7 +234,7 @@ async def query_rag_system(request: QueryRequest):
         async def event_generator(project_id, lead_id):
             projectId = True
             leadId = True
-            for chunk in generated_response.split('. '):  
+            for chunk in generated_response.split(' '):  
                 yield f"data: {chunk.strip()}\n\n"
                 await asyncio.sleep(1)
                 if project_id:
