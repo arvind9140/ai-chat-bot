@@ -268,7 +268,7 @@ async def query_rag_system(request: QueryRequest):
             "temperature": 0.7,
             # "stream": False,
             "stream": True
-           
+
         }
 
         # Call the Gemini API
@@ -288,7 +288,7 @@ async def query_rag_system(request: QueryRequest):
             leadId = True
             for chunk in response.iter_lines(decode_unicode=True):
                 if chunk:
-                    yield f"data: {chunk.strip()}\n\n"
+                    yield f"{chunk.strip()}\n\n"
                     # await asyncio.sleep(1)
                     if project_id:
                         if projectId:
@@ -299,8 +299,7 @@ async def query_rag_system(request: QueryRequest):
                             yield f"data: lead_id:{lead_id}\n\n"
                             leadId = False
 
-        return StreamingResponse(event_generator(project_id, lead_id), media_type="text/event-stream")
-        
+        return StreamingResponse(event_generator(project_id, lead_id), media_type="json/event-stream")
 
     except Exception as e:
         print(f"Error: {e}")
