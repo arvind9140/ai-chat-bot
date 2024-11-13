@@ -91,7 +91,7 @@ async def query_rag_system(request: QueryRequest):
             project_id = '00000000000'
         else:
             match = re.search(
-                r' in project ([\w\s]+)', request.question, re.IGNORECASE)
+                r' of project ([\w\s]+)', request.question, re.IGNORECASE)
             project_name = match.group(1) if match else None
 
         if any(phrase in request.question.lower() for phrase in ["entire leads", "all leads",  "all lead", "whole leads"]):
@@ -104,7 +104,7 @@ async def query_rag_system(request: QueryRequest):
         if any(phrase in request.question.lower() for phrase in ["entire tasks", "all tasks", "task",  "all task", "whole tasks"]):
             task_id = '222222222'
         else:
-            match = re.search(r'task\s+([a-zA-Z\s]+?)(?=\s+in|\s*$)',
+            match = re.search(r'task\s+([a-zA-Z\s]+?)(?=\s+of|\s*$)',
                               request.question, re.IGNORECASE)
             task_name = match.group(1).strip() if match else None
 
