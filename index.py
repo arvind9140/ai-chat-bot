@@ -276,45 +276,6 @@ async def query_rag_system(request: QueryRequest):
                     else:
                         context = {"message": "lead not found."}
             if task_id == '222222222':
-                   if project_name:
-                        project_details = db[project_collection].find_one(
-                            {"project_name": project_name, "org_id": org_id})
-                        if project_details:
-                            project_id = project_details.get("project_id")
-                            tasks = list(
-                                db[task_collection].find({"project_id": project_id}))
-                            task_list = [
-                                {
-                                    'task_name': task.get('task_name'),
-                                    'task_assignee': task.get('task_assignee'),
-                                    'reporter': task.get('reporter'),
-                                    'task_status': task.get('task_status'),
-                                    'task_priority': task.get('task_priority'),
-                                    'task_createdOn': task.get('task_createdOn'),
-                                    'estimated_task_start_date': task.get('estimated_task_start_date'),
-                                    'estimated_task_end_date': task.get('estimated_task_end_date'),
-                                }
-                                for task in tasks
-                            ]
-                            context['tasks'] = task_list
-                        else:
-                            context = {"message": "project not found"}
-                    else:
-                        context = {"message": "project not found"}
-
-        else:
-            # For other roles, check access
-            
-            find_project = db[project_collection].find_one(
-                {"project_name": project_name, "org_id": org_id})
-            find_lead = db[lead_collection].find_one(
-                {"name": lead_name, "org_id": org_id})
-            if find_project:
-                project_id = find_project.get("project_id")
-                check_user_access = db[user_collection].find_one({"_id": ObjectId(
-                    user_id), "organization": org_id, "data.projectData.project_id": project_id})
-                if check_user_access:
-                    if task_id == '222222222':
                     if project_name:
                         project_details = db[project_collection].find_one(
                             {"project_name": project_name, "org_id": org_id})
@@ -340,6 +301,45 @@ async def query_rag_system(request: QueryRequest):
                             context = {"message": "project not found"}
                     else:
                         context = {"message": "project not found"}
+            
+        else:
+            # For other roles, check access
+            
+            find_project = db[project_collection].find_one(
+                {"project_name": project_name, "org_id": org_id})
+            find_lead = db[lead_collection].find_one(
+                {"name": lead_name, "org_id": org_id})
+            if find_project:
+                project_id = find_project.get("project_id")
+                check_user_access = db[user_collection].find_one({"_id": ObjectId(
+                    user_id), "organization": org_id, "data.projectData.project_id": project_id})
+                if check_user_access:
+                    if task_id == '222222222':
+                         if project_name:
+                            project_details = db[project_collection].find_one(
+                            {"project_name": project_name, "org_id": org_id})
+                            if project_details:
+                                project_id = project_details.get("project_id")
+                                tasks = list(
+                                    db[task_collection].find({"project_id": project_id}))
+                                task_list = [
+                                    {
+                                        'task_name': task.get('task_name'),
+                                        'task_assignee': task.get('task_assignee'),
+                                        'reporter': task.get('reporter'),
+                                        'task_status': task.get('task_status'),
+                                        'task_priority': task.get('task_priority'),
+                                        'task_createdOn': task.get('task_createdOn'),
+                                        'estimated_task_start_date': task.get('estimated_task_start_date'),
+                                        'estimated_task_end_date': task.get('estimated_task_end_date'),
+                                    }
+                                    for task in tasks
+                                ]
+                                context['tasks'] = task_list
+                            else:
+                               context = {"message": "project not found"}
+                         else:
+                            context = {"message": "project not found"}
                     project_info = {k: v for k, v in find_project.items() if k not in [
                         '_id', 'project_id', 'org_id']}
                     project_info['assignees'] = [assignee['username'] for assignee in db[user_collection].find(
