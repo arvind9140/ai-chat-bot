@@ -26,7 +26,7 @@ MONGODB_URI = os.getenv('MONGODB_URI')
 TOKEN = os.getenv('TOKEN')
 
 client = MongoClient(MONGODB_URI)
-db = client['uat_colonelz']
+db = client['interior_Design']
 project_collection = "project"
 lead_collection = "Lead"
 user_collection = "users"
