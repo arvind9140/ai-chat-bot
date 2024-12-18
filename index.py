@@ -24,9 +24,10 @@ def clean_response_text(text):
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 MONGODB_URI = os.getenv('MONGODB_URI')
 TOKEN = os.getenv('TOKEN')
+DATABASE_NAME = os.getenv('DATABASE_NAME')
 
 client = MongoClient(MONGODB_URI)
-db = client['interior_Design']
+db = client[DATABASE_NAME]
 project_collection = "project"
 lead_collection = "Lead"
 user_collection = "users"
@@ -101,7 +102,7 @@ async def query_rag_system(request: QueryRequest):
                               request.question, re.IGNORECASE)
             lead_name = match.group(1) if match else None
 
-        if any(phrase in request.question.lower() for phrase in ["entire tasks", "all tasks","all task", "whole tasks"]):
+        if any(phrase in request.question.lower() for phrase in ["entire tasks", "all tasks", "all task", "whole tasks"]):
             task_id = '222222222'
         else:
             match = re.search(r'task\s+([a-zA-Z\s]+?)(?=\s+of|\s*$)',
@@ -276,35 +277,35 @@ async def query_rag_system(request: QueryRequest):
                     else:
                         context = {"message": "lead not found."}
             if task_id == '222222222':
-                    if project_name:
-                        project_details = db[project_collection].find_one(
-                            {"project_name": project_name, "org_id": org_id})
-                        if project_details:
-                            project_id = project_details.get("project_id")
-                            tasks = list(
-                                db[task_collection].find({"project_id": project_id}))
-                            task_list = [
-                                {
-                                    'task_name': task.get('task_name'),
-                                    'task_assignee': task.get('task_assignee'),
-                                    'reporter': task.get('reporter'),
-                                    'task_status': task.get('task_status'),
-                                    'task_priority': task.get('task_priority'),
-                                    'task_createdOn': task.get('task_createdOn'),
-                                    'estimated_task_start_date': task.get('estimated_task_start_date'),
-                                    'estimated_task_end_date': task.get('estimated_task_end_date'),
-                                }
-                                for task in tasks
-                            ]
-                            context['tasks'] = task_list
-                        else:
-                            context = {"message": "project not found"}
+                if project_name:
+                    project_details = db[project_collection].find_one(
+                        {"project_name": project_name, "org_id": org_id})
+                    if project_details:
+                        project_id = project_details.get("project_id")
+                        tasks = list(
+                            db[task_collection].find({"project_id": project_id}))
+                        task_list = [
+                            {
+                                'task_name': task.get('task_name'),
+                                'task_assignee': task.get('task_assignee'),
+                                'reporter': task.get('reporter'),
+                                'task_status': task.get('task_status'),
+                                'task_priority': task.get('task_priority'),
+                                'task_createdOn': task.get('task_createdOn'),
+                                'estimated_task_start_date': task.get('estimated_task_start_date'),
+                                'estimated_task_end_date': task.get('estimated_task_end_date'),
+                            }
+                            for task in tasks
+                        ]
+                        context['tasks'] = task_list
                     else:
                         context = {"message": "project not found"}
-            
+                else:
+                    context = {"message": "project not found"}
+
         else:
             # For other roles, check access
-            
+
             find_project = db[project_collection].find_one(
                 {"project_name": project_name, "org_id": org_id})
             find_lead = db[lead_collection].find_one(
@@ -315,9 +316,9 @@ async def query_rag_system(request: QueryRequest):
                     user_id), "organization": org_id, "data.projectData.project_id": project_id})
                 if check_user_access:
                     if task_id == '222222222':
-                         if project_name:
+                        if project_name:
                             project_details = db[project_collection].find_one(
-                            {"project_name": project_name, "org_id": org_id})
+                                {"project_name": project_name, "org_id": org_id})
                             if project_details:
                                 project_id = project_details.get("project_id")
                                 tasks = list(
@@ -337,8 +338,8 @@ async def query_rag_system(request: QueryRequest):
                                 ]
                                 context['tasks'] = task_list
                             else:
-                               context = {"message": "project not found"}
-                         else:
+                                context = {"message": "project not found"}
+                        else:
                             context = {"message": "project not found"}
                     project_info = {k: v for k, v in find_project.items() if k not in [
                         '_id', 'project_id', 'org_id']}
